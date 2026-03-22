@@ -1,6 +1,7 @@
 use super::{chart::ChartSettings, BpmList, CtrlObject, JudgeLine, Matrix, Object, Point, Resource};
 pub use crate::{
-    judge::{HitSound, JudgeStatus},
+    config::Mods,
+    judge::{HitSound, JudgeStatus, LIMIT_BAD},
     parse::RPE_HEIGHT,
 };
 use macroquad::prelude::*;
@@ -48,11 +49,11 @@ pub struct RenderConfig<'a> {
     pub ctrl_obj: &'a mut CtrlObject,
     pub line_height: f32,
     pub appear_before: f32,
-    pub invisible_time: f32,
     pub draw_below: bool,
     pub incline_sin: f32,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_tex(res: &Resource, texture: Texture2D, order: i8, x: f32, y: f32, color: Color, mut params: DrawTextureParams, clip: bool) {
     let Vec2 { x: w, y: h } = params.dest_size.unwrap();
     if h < 0. {
@@ -169,7 +170,11 @@ impl Note {
     pub fn now_transform(&self, res: &Resource, ctrl_obj: &CtrlObject, base: f32, incline_sin: f32) -> Matrix {
         let incline_val = 1. - incline_sin * (base * res.aspect_ratio + self.object.translation.1.now()) * RPE_HEIGHT / 2. / 360.;
         let mut tr = self.object.now_translation(res);
-        tr.x *= incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.);
+        tr.x *= if matches!(self.kind, NoteKind::Hold { .. }) {
+            1.
+        } else {
+            incline_val * ctrl_obj.pos.now_opt().unwrap_or(1.)
+        };
         tr.y += base;
         let mut scale = self.object.scale.now_with_def(1.0, 1.0);
         scale.x *= ctrl_obj.size.now_opt().unwrap_or(1.0);
@@ -193,9 +198,6 @@ impl Note {
                 return;
             }
         }
-        if config.invisible_time.is_finite() && self.time - config.invisible_time < res.time {
-            return;
-        }
         let scale = (if res.config.double_hint && self.multiple_hint {
             res.res_pack.note_style_mh.click.width() / res.res_pack.note_style.click.width()
         } else {
@@ -215,18 +217,17 @@ impl Note {
             height - line_height
         } else {
             match self.kind {
-                NoteKind::Hold { end_time: _,  end_height } => {
+                NoteKind::Hold { end_time: _, end_height } => {
                     let end_height = end_height / res.aspect_ratio * spd;
                     end_height - line_height
                 }
-                _ => {
-                    height - line_height
-                }
+                _ => height - line_height,
             }
         };
 
         if !config.draw_below
-            && ((res.time - FADEOUT_TIME >= self.time && !matches!(self.kind, NoteKind::Hold { .. })) || (self.time > res.time && cover_base <= -0.001))
+            && ((res.time - FADEOUT_TIME >= self.time && !matches!(self.kind, NoteKind::Hold { .. }))
+                || (self.time > res.time && cover_base <= -0.001))
         {
             return;
         }
@@ -236,11 +237,19 @@ impl Note {
         } else {
             &res.res_pack.note_style
         };
+        let mod_alpha = if res.config.has_mod(Mods::FADE_OUT) {
+            ((self.time - res.time - LIMIT_BAD) / LIMIT_BAD).clamp(0., 1.)
+        } else if res.config.has_mod(Mods::FADE_IN) {
+            (1. - (self.time - res.time - LIMIT_BAD) / LIMIT_BAD).clamp(0., 1.)
+        } else {
+            1.
+        };
         let draw = |res: &mut Resource, tex: Texture2D| {
             let mut color = color;
             if !config.draw_below {
                 color.a *= (self.time - res.time).min(0.) / FADEOUT_TIME + 1.;
             }
+            color.a *= mod_alpha;
             res.with_model(self.now_transform(res, ctrl_obj, base, config.incline_sin), |res| {
                 draw_center(res, tex, order, scale, color);
             });
@@ -264,6 +273,7 @@ impl Note {
                         return;
                     }
                     let end_height = end_height / res.aspect_ratio * spd;
+                    color.a *= mod_alpha;
 
                     let h = if self.time <= res.time { line_height } else { height };
                     let bottom = h - line_height;

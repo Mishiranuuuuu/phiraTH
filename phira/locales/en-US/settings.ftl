@@ -8,6 +8,7 @@ debug = Debug
 about = Info
 
 item-lang = Language
+item-fullscreen = Fullscreen Mode
 item-offline = Offline Mode
 item-offline-sub = Disable all online functionality.
 item-server-status = Server Status
@@ -39,8 +40,14 @@ item-music = Music Volume
 item-sfx = SFX Volume
 item-bgm = BGM Volume
 item-cali = Adjust Offset
+item-preferred-sample-rate = Preferred Sample Rate
+preferred-sample-rate-default = System Default
+item-audio-buffer-size = Audio Buffer Size
 
 item-show-acc = Real-Time Accuracy
+item-show-avg-fps = Show AVG FPS
+item-ap-fc-indicator = AP/FC Indicator
+item-ap-fc-indicator-sub = Use line color to indicate AP/FC status.
 item-dc-pause = Double-Tap to Pause
 item-dhint = Simultaneous Hint
 item-dhint-sub = Highlight notes that are meant to be hit at the same time.

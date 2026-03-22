@@ -1,7 +1,7 @@
 prpr_l10n::tl_file!("import" itl);
 
 mod chart_order;
-pub use chart_order::{ChartOrder, ORDERS};
+pub use chart_order::ChartOrder;
 
 mod chapter;
 pub use chapter::ChapterScene;
@@ -13,7 +13,7 @@ mod main;
 pub use main::{MainScene, BGM_VOLUME_UPDATED, MP_PANEL};
 
 mod song;
-pub use song::{Downloading, SongScene, RECORD_ID};
+pub use song::{compress_folder, Downloading, SongScene, RECORD_ID};
 #[cfg(feature = "video")]
 mod unlock;
 #[cfg(feature = "video")]
@@ -27,7 +27,7 @@ use crate::{
     data::LocalChart,
     dir, get_data, get_data_mut,
     page::Fader,
-    save_data, ttl,
+    save_data,
 };
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
@@ -37,8 +37,9 @@ use prpr::{
     core::{BOLD_FONT, PGR_FONT},
     ext::{semi_white, unzip_into, RectExt, SafeTexture},
     fs::{self, FileSystem},
-    info::ChartInfo,
-    scene::{show_error, show_message, FullLoadingView},
+    info::{ChartFormat, ChartInfo},
+    parse::has_new_speed_events,
+    scene::{show_error, show_message, FullLoadingView, GameScene},
     task::Task,
     ui::{Dialog, RectButton, Scroll, Scroller, Ui},
 };
@@ -63,7 +64,8 @@ thread_local! {
 
 pub static ASSET_CHART_INFO: Lazy<Mutex<Option<ChartInfo>>> = Lazy::new(Mutex::default);
 pub static TERMS: OnceCell<Option<(String, String)>> = OnceCell::new();
-pub static LOAD_TOS_TASK: Lazy<Mutex<Option<Task<Result<Option<(String, String)>>>>>> = Lazy::new(Mutex::default);
+type LoadTosTask = Task<Result<Option<(String, String)>>>;
+pub static LOAD_TOS_TASK: Lazy<Mutex<Option<LoadTosTask>>> = Lazy::new(Mutex::default);
 pub static JUST_ACCEPTED_TOS: Lazy<AtomicBool> = Lazy::new(AtomicBool::default);
 pub static JUST_LOADED_TOS: Lazy<AtomicBool> = Lazy::new(AtomicBool::default);
 
@@ -77,7 +79,7 @@ impl FileSystem for AssetsChartFileSystem {
         if path == ":info" {
             return Ok(serde_yaml::to_string(&ASSET_CHART_INFO.lock().unwrap().clone())?.into_bytes());
         }
-        #[cfg(feature = "closed")]
+        #[cfg(closed)]
         {
             use crate::load_res;
             if path == ":music" {
@@ -142,7 +144,7 @@ pub fn check_read_tos_and_policy(change_just_accepted: bool, strict: bool) -> bo
         Some(Some((terms, modified))) => {
             let content = ttl!("tos-and-policy-desc") + "\n\n" + terms.as_str();
             let lines = content.split('\n').collect::<Vec<_>>();
-            let pages = lines.chunks(10).map(|it| it.join("\n")).collect::<Vec<_>>();
+            let pages = lines.chunks(50).map(|it| it.join("\n")).collect::<Vec<_>>();
             let pages_len = pages.len();
             let mut page = 0;
             let gen_buttons = move |page: usize| {
@@ -277,30 +279,64 @@ pub fn gen_custom_dir() -> Result<(PathBuf, Uuid)> {
     Ok((dir, id))
 }
 
-pub async fn import_chart_to(dir: &Path, id: Uuid, path: String) -> Result<LocalChart> {
-    let path = Path::new(&path);
-    if !path.exists() || !path.is_file() {
-        bail!("not a file");
+#[derive(Debug, Default)]
+pub struct ImportWarnings {
+    pub has_new_speed_events: bool,
+}
+impl ImportWarnings {
+    pub fn to_string(&self) -> Option<String> {
+        let mut warnings = vec![];
+        if self.has_new_speed_events {
+            warnings.push(format!("- {}", itl!("warning-new-speed-event")));
+        }
+        if warnings.is_empty() {
+            None
+        } else {
+            Some(warnings.join("\n"))
+        }
     }
+}
+
+async fn check_speed(fs: &mut dyn FileSystem, info: &ChartInfo, warnings: &mut ImportWarnings) -> Result<()> {
+    let bytes = GameScene::load_chart_bytes(fs, info).await.context("Failed to load chart")?;
+    let format = GameScene::infer_chart_format(info, &bytes);
+    if format != ChartFormat::Rpe {
+        return Ok(());
+    }
+    let source = String::from_utf8_lossy(&bytes);
+    if has_new_speed_events(&source).await? {
+        warnings.has_new_speed_events = true;
+    }
+
+    Ok(())
+}
+
+pub async fn import_chart_to(dir: &Path, local_path: String, file: File) -> Result<(LocalChart, ImportWarnings)> {
+    let mut warnings = ImportWarnings::default();
     let dir = prpr::dir::Dir::new(dir)?;
-    unzip_into(BufReader::new(File::open(path)?), &dir, true)?;
-    let local_path = format!("custom/{id}");
+    unzip_into(BufReader::new(file), &dir, true)?;
     let mut fs = fs_from_path(&local_path)?;
     let mut info = fs::load_info(fs.as_mut()).await.with_context(|| itl!("info-fail"))?;
     fs::fix_info(fs.as_mut(), &mut info).await.with_context(|| itl!("invalid-chart"))?;
+    if info.use_rpe_170_speed.is_none() {
+        check_speed(fs.as_mut(), &info, &mut warnings).await?;
+    }
     dir.create("info.yml")?.write_all(serde_yaml::to_string(&info)?.as_bytes())?;
-    Ok(LocalChart {
-        info: info.into(),
-        local_path,
-        record: None,
-        mods: Mods::default(),
-        played_unlock: false,
-    })
+    Ok((
+        LocalChart {
+            info: info.into(),
+            local_path,
+            record: None,
+            mods: Mods::default(),
+            played_unlock: false,
+        },
+        warnings,
+    ))
 }
 
-pub async fn import_chart(path: String) -> Result<LocalChart> {
+pub async fn import_chart(file: File) -> Result<(LocalChart, ImportWarnings)> {
     let (dir, id) = gen_custom_dir()?;
-    match import_chart_to(&dir, id, path).await {
+    match import_chart_to(&dir, format!("custom/{id}"), file).await {
         Err(err) => {
             std::fs::remove_dir_all(dir)?;
             Err(err)
@@ -317,6 +353,7 @@ pub struct LdbDisplayItem<'a> {
     pub btn: &'a mut RectButton,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_ldb<'a>(
     ui: &mut Ui,
     title: &str,
@@ -418,18 +455,13 @@ pub fn render_release_to_refresh(ui: &mut Ui, cx: f32, off: f32) {
 
 #[cfg(test)]
 mod tests {
-    use std::ops::DerefMut;
-
-    use fs::load_info;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn test_parse_chart() -> Result<()> {
-        // Put the chart in phira(workspace, not crate)/test which is ignored by git
-        let mut fs = fs_from_path("../../../test")?;
-        let info = load_info(fs.as_mut()).await?;
-        let _chart = prpr::scene::GameScene::load_chart(fs.deref_mut(), &info).await?;
-        Ok(())
-    }
+    // #[tokio::test]
+    // #[ignore = "Chart parsing test"]
+    // async fn test_parse_chart() -> Result<()> {
+    //     // Put the chart in phira(workspace, not crate)/test which is ignored by git
+    //     let mut fs = fs_from_path("../../../test")?;
+    //     let info = load_info(fs.as_mut()).await?;
+    //     let _chart = prpr::scene::GameScene::load_chart(fs.deref_mut(), &info).await?;
+    //     Ok(())
+    // }
 }

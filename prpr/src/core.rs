@@ -50,7 +50,10 @@ mod smooth;
 pub use smooth::Smooth;
 
 mod tween;
-pub use tween::{easing_from, BezierTween, ClampedTween, StaticTween, TweenFunction, TweenId, TweenMajor, TweenMinor, Tweenable, TWEEN_FUNCTIONS};
+pub use tween::{
+    easing_from, BezierTween, ClampedTween, GeneralIntTween, IntClampedTween, IntStaticTween, StaticTween, TweenFunction, TweenId, TweenMajor,
+    TweenMinor, Tweenable, TWEEN_FUNCTIONS,
+};
 
 #[cfg(feature = "video")]
 mod video;
@@ -68,6 +71,7 @@ thread_local! {
 }
 
 pub fn init_assets() {
+    #[cfg(not(target_env = "ohos"))]
     if let Ok(mut exe) = std::env::current_exe() {
         while exe.pop() {
             if exe.join("assets").exists() {
@@ -76,6 +80,8 @@ pub fn init_assets() {
             }
         }
     }
+    #[cfg(target_env = "ohos")]
+    let _ = std::env::set_current_dir("/data/storage/el1/bundle/entry/resources/resfile/");
     set_pc_assets_folder("assets");
 }
 

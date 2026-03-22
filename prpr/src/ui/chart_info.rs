@@ -1,8 +1,10 @@
 prpr_l10n::tl_file!("chart_info");
 
 use super::Ui;
-use crate::{core::BOLD_FONT, ext::parse_time, info::ChartInfo, scene::show_message};
+use crate::{core::BOLD_FONT, ext::parse_time, info::ChartInfo, scene::show_message, ui::InputParams};
 use anyhow::Result;
+use inputbox::InputMode;
+use macroquad::math::Rect;
 use std::{borrow::Cow, collections::HashMap};
 
 #[derive(Clone)]
@@ -78,7 +80,7 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
         dy!(0.01);
         let r = ui.text(tl!("edit-chart")).size(0.9).draw_using(&BOLD_FONT);
         dy!(r.h + 0.04);
-        let rt = 0.22;
+        let rt = 0.28;
         ui.dx(rt);
         let len = width - rt - 0.04;
         let info = &mut edit.info;
@@ -111,8 +113,8 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
             edit.updated = true;
             match || -> Result<(f32, f32), Cow<'static, str>> {
                 let (st, en) = string.split_once(['-', '—']).ok_or_else(|| tl!("illegal-input"))?;
-                let st = parse_time(st.trim()).ok_or_else(|| tl!("invalid time"))?;
-                let en = parse_time(en.trim()).ok_or_else(|| tl!("invalid time"))?;
+                let st = parse_time(st.trim()).ok_or_else(|| tl!("invalid-time"))?;
+                let en = parse_time(en.trim()).ok_or_else(|| tl!("invalid-time"))?;
                 if st + 1. > en {
                     return Err(tl!("preview-too-short"));
                 }
@@ -181,6 +183,11 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
             ui.text(tl!("aspect-hint")).pos(0.02, 0.).size(0.35).max_width(len).multiline().draw().h + 0.03
         }));
 
+        ui.dx(0.01);
+        let r = ui.checkbox(tl!("force-aspect-ratio"), &mut info.force_aspect_ratio);
+        dy!(r.h + s);
+        ui.dx(-0.01);
+
         ui.dx(-rt);
         let last = info.background_dim;
         let r = ui.slider(tl!("dim"), 0.0..1.0, 0.05, &mut info.background_dim, Some(width - 0.2));
@@ -190,14 +197,28 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
         dy!(r.h + s + 0.01);
         ui.dx(rt);
 
+        let r = ui.text(tl!("rpe-170-speed")).size(0.47).anchor(1., 0.).draw();
+        let r = Rect::new(0.02, r.y - 0.01, r.h + 0.02, r.h + 0.02);
+        let check_str = match info.use_rpe_170_speed {
+            Some(true) => "\u{2713}",
+            Some(false) => "x",
+            None => "",
+        };
+        if ui.button("rpespeed", r, check_str.to_string()) {
+            const OPTIONS: [Option<bool>; 3] = [None, Some(true), Some(false)];
+            let next = OPTIONS.iter().cycle().skip_while(|&&x| x != info.use_rpe_170_speed).nth(1).unwrap();
+            info.use_rpe_170_speed = *next;
+            edit.updated = true;
+        }
+        dy!(r.h + s);
+
         #[cfg(not(target_arch = "wasm32"))]
         {
             use crate::scene::{request_file, return_file, take_file};
-            use macroquad::prelude::Rect;
 
             let r = ui.text(tl!("enable-unlock")).size(0.47).anchor(1., 0.).draw();
             let r = Rect::new(0.02, r.y - 0.01, r.h + 0.02, r.h + 0.02);
-            let check_str = if edit.enable_unlock { "v" } else { "" };
+            let check_str = if edit.enable_unlock { "\u{2713}" } else { "" };
             if ui.button("unlockchk", r, check_str.to_string()) {
                 if edit.enable_unlock {
                     info.unlock_video = None;
@@ -255,7 +276,15 @@ pub fn render_chart_info(ui: &mut Ui, edit: &mut ChartInfoEdit, width: f32) -> (
         dy!(r.h + s);
         info.tip = if string.is_empty() { None } else { Some(string) };
 
-        ui.input(tl!("intro"), &mut info.intro, (len, &mut edit.updated));
+        ui.input(
+            tl!("intro"),
+            &mut info.intro,
+            InputParams {
+                changed: Some(&mut edit.updated),
+                mode: InputMode::Multiline,
+                length: len,
+            },
+        );
         ui.dx(-0.02);
     });
     (width, sy)

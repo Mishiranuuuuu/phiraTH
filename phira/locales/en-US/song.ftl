@@ -1,7 +1,6 @@
 
 load-preview-failed = Failed to load song preview
 load-charts-failed = Failed to load beatmaps
-no-chart-for-download = This beatmap is not downloadable
 
 load-chart-failed = Failed to load the beatmap
 
@@ -47,6 +46,8 @@ edit-overwrite-failed = Failed to overwrite.
 edit-upload = Upload
 edit-update = Update
 
+warn = Warning
+cancel-not-saved = Chart hasn't been saved yet, would you like to exit now?
 upload-not-saved = Chart hasn't been saved yet, would you like to save it now?
 upload-login-first = Please login first.
 upload-builtin = Built-in charts cannot be uploaded.
@@ -85,6 +86,7 @@ reviewed = Reviewed
 unreviewed = Unreviewed
 
 review-approve = Approve
+review-approve-confirm = Approve this chart? This action cannot be undone.
 review-deny = Deny
 review-del = Delete Online
 review-approved = Approved
@@ -100,11 +102,17 @@ review-edit-tags-done = Tags updated.
 
 mods = Mods
 mods-autoplay = Autoplay
-mods-autoplay-sub = Plays the chart without user input.
+mods-autoplay-sub = Results will not be submitted when enabled.
 mods-flip-x = Mirror
 mods-flip-x-sub = Mirrors the chart by the X-axis.
+mods-fade-in = Fade-In
+mods-fade-in-sub = Makes notes fade in when they approach the judgeline.
 mods-fade-out = Fade-Out
 mods-fade-out-sub = Makes notes fade out when they approach the judgeline.
+mods-nightcore = Nightcore
+mods-nightcore-sub = Plays the chart at higher speed
+mods-rainbow = Rainbow
+mods-rainbow-sub = Makes your game a *little* more colorful
 
 rate-failed = Rate failed.
 rate-done = Rated successfully.
@@ -121,6 +129,7 @@ stabilize-requested = Stabilization request sent.
 stabilize-failed = Stabilization failed.
 stabilize-approve = Approve Special
 stabilize-approve-ranked = Approve Stable
+stabilize-approve-confirm = Approve stabilization for this chart? This action cannot be undone.
 stabilize-comment = Stable Comment
 stabilize-commented = Commented
 stabilize-deny = Deny Stable
@@ -128,3 +137,7 @@ stabilize-approved = Approved
 stabilize-approved-passed = The chart has been stabilized.
 stabilize-denied = Denied
 stabilize-denied-passed = Denied, the beatmap is rejected
+
+fav-added = Added to favorites
+
+still-loading = Still loading...
