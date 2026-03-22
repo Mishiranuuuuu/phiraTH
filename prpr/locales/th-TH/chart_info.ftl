@@ -17,12 +17,15 @@ ps = ป.ล.
 aspect-hint = Aspect ratio สามารถใช้ตัวเลขหรือตัวอักษรก็ได้ ตัวอย่างเช่น "w:h"
 force-aspect-ratio = Force aspect ratio
 dim = ความสว่างของ Background
+enable-unlock = เล่น Unlock Video
 chart-file = ไฟล์ Chart
 music-file = ไฟล์เพลง
 illu-file = ไฟล์ภาพ
+unlock-file = ไฟล์ Video
 tip = Tip
 intro = Intro
 tags = Tags
 tag-exists = Tag นี้มีอยู่แล้ว
+rpe-170-speed = New Speed Twee
 
 illegal-input = Illegal input
